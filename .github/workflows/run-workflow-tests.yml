@@ -33,6 +33,9 @@ jobs:
 
     - name: Install xircuits in virtual environment
       run: pip install xircuits
+    
+    - name: Init Xircuits
+      run: xircuits init      
 
     - name: Set Environment Variables
       run: |
