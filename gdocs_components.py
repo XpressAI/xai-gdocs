@@ -100,21 +100,21 @@ def markdown_to_docs_requests(service, document_id, markdown_content):
             current_index += len(text_to_insert) + 1
 
         elif element.name == 'h1':
-            requests.append(create_heading_request(element.text, 'HEADING_1', current_index))
+            requests.extend(create_heading_request(element.text, 'HEADING_1', current_index))
             current_index += len(element.text) + 1
         elif element.name == 'h2':
-            requests.append(create_heading_request(element.text, 'HEADING_2', current_index))
+            requests.extend(create_heading_request(element.text, 'HEADING_2', current_index))
             current_index += len(element.text) + 1
         elif element.name == 'h3':
-            requests.append(create_heading_request(element.text, 'HEADING_3', current_index))
+            requests.extend(create_heading_request(element.text, 'HEADING_3', current_index))
             current_index += len(element.text) + 1
         elif element.name == 'ul':
             for li in element.find_all('li'):
-                requests.append(create_list_item_request(li.text, 'LIST_BULLET', current_index))
+                requests.extend(create_list_item_request(li.text, 'LIST_BULLET', current_index))
                 current_index += len(li.text) + 1
         elif element.name == 'ol':
             for li in element.find_all('li'):
-                requests.append(create_list_item_request(li.text, 'LIST_NUMBERED', current_index))
+                requests.extend(create_list_item_request(li.text, 'LIST_NUMBERED', current_index))
                 current_index += len(li.text) + 1
         elif element.name == 'hr':
             requests.append({
@@ -156,40 +156,48 @@ def markdown_to_docs_requests(service, document_id, markdown_content):
 
 
 def create_heading_request(text, heading_type, index):
-    return {
-        'insertText': {
-            'location': {'index': index},
-            'text': text + '\n'
+    return [
+        {
+            'insertText': {
+                'location': {'index': index},
+                'text': text + '\n'
+            },
         },
-        'updateParagraphStyle': {
-            'paragraphStyle': {
-                'namedStyleType': heading_type
-            },
-            'range': {
-                'startIndex': index,
-                'endIndex': index + len(text)
-            },
-            'fields': 'namedStyleType'
+        {
+            'updateParagraphStyle': {
+                'paragraphStyle': {
+                    'namedStyleType': heading_type
+                },
+                'range': {
+                    'startIndex': index,
+                    'endIndex': index + len(text)
+                },
+                'fields': 'namedStyleType'
+            }
         }
-    }
+    ]
 
 def create_list_item_request(text, list_type, index):
-    return {
-        'insertText': {
-            'location': {'index': index},
-            'text': text + '\n'
+    return [
+        {
+            'insertText': {
+                'location': {'index': index},
+                'text': text + '\n'
+            },
         },
-        'updateParagraphStyle': {
-            'paragraphStyle': {
-                'bulletPreset': list_type
-            },
-            'range': {
-                'startIndex': index,
-                'endIndex': index + len(text)
-            },
-            'fields': 'bulletPreset'
+        {
+            'updateParagraphStyle': {
+                'paragraphStyle': {
+                    'bulletPreset': list_type
+                },
+                'range': {
+                    'startIndex': index,
+                    'endIndex': index + len(text)
+                },
+                'fields': 'bulletPreset'
+            }
         }
-    }
+    ]
 
 
 
