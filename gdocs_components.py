@@ -361,3 +361,51 @@ class GoogleDocAppendContent(Component):
         except Exception as e:
             print(f"Error during appending content: {e}")
             self.success.value = False
+
+@xai_component
+class GoogleDocDeleteContent(Component):
+    """A component that deletes all content from a Google Doc.
+
+    ##### inPorts:
+    - doc_id (str): The ID of the Google Doc to delete content from.
+    - credentials_path (str): The path to the JSON file containing Google API credentials.
+    
+    ##### outPorts:
+    - success (bool): Indicates whether the content was successfully deleted.
+    """
+    client: InArg[any]
+    doc_id: InArg[str]
+    success: OutArg[bool]
+
+    def execute(self, ctx) -> None:
+        # Use the provided client or retrieve it from the context.
+        if self.client.value is not None:
+            service = self.client.value
+        else:
+            service = ctx['gdocs']
+
+        document_id = self.doc_id.value
+
+        # Determine the end index of the document's content.
+        end_index = get_document_end_index(service, document_id)
+
+        # Build the delete request to remove all content (from index 1 up to end_index).
+        delete_request = [{
+            'deleteContentRange': {
+                'range': {
+                    'startIndex': 1,
+                    'endIndex': end_index
+                }
+            }
+        }]
+
+        try:
+            # Execute the batch update to delete the content.
+            service.documents().batchUpdate(
+                documentId=document_id,
+                body={'requests': delete_request}
+            ).execute()
+            self.success.value = True
+        except Exception as e:
+            print(f"An error occurred: {e}", flush=True)
+            self.success.value = False
