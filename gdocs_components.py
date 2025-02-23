@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-# Xircuits component decorators and port definitions
+# Xircuits component utilities
 from xai_components.base import InArg, OutArg, Component, xai_component, InCompArg
 
 # ----------------- Utility Functions -----------------
@@ -28,7 +28,8 @@ def get_document_end_index(service, document_id):
 def parse_markdown_to_requests(markdown_content, base_index):
     """
     Convert markdown into a continuous text block and generate a list of style update requests.
-    The new text is assumed to be inserted at base_index, so all update request ranges are offset accordingly.
+    The new text will be inserted at base_index. The produced update request ranges are offset accordingly.
+    
     Supports basic inline formatting in paragraphs/headings (bold, italic, links, code).
     
     Returns:
@@ -87,7 +88,6 @@ def parse_markdown_to_requests(markdown_content, base_index):
         elif element.name in ["h1", "h2", "h3", "h4", "h5", "h6"]:
             text = element.get_text()
             insertion_text += text + "\n"
-            # Apply bold styling for headings as an example.
             style_requests.append({
                 "updateTextStyle": {
                     "range": {
@@ -100,7 +100,7 @@ def parse_markdown_to_requests(markdown_content, base_index):
             })
             current_offset += len(text) + 1
         elif element.name in ["ul", "ol"]:
-            bullet = "- " if element.name=="ul" else "1. "
+            bullet = "- " if element.name == "ul" else "1. "
             for li in element.find_all("li"):
                 li_text = li.get_text()
                 line = bullet + li_text
@@ -120,14 +120,13 @@ def parse_markdown_to_requests(markdown_content, base_index):
 def find_marker_range(document: dict, marker: str):
     """
     Search the document's body for the first occurrence of marker.
-    Returns a tuple (start_index, end_index) for the marker, or (None, None) if not found.
+    Returns (start_index, end_index) of the marker, or (None, None) if not found.
     """
     content = document.get("body", {}).get("content", [])
     for element in content:
         if "paragraph" in element:
             para = element["paragraph"]
             elements = para.get("elements", [])
-            # Use paragraph startIndex if present.
             current_index = element.get("startIndex", 0)
             for el in elements:
                 text_run = el.get("textRun")
@@ -136,7 +135,6 @@ def find_marker_range(document: dict, marker: str):
                 text = text_run.get("content", "")
                 marker_pos = text.find(marker)
                 if marker_pos != -1:
-                    # Use the element's startIndex (if available) to compute absolute index.
                     element_start = el.get("startIndex", current_index)
                     start_index = element_start + marker_pos
                     end_index = start_index + len(marker)
@@ -148,9 +146,10 @@ def find_marker_range(document: dict, marker: str):
 @xai_component
 class GoogleDocAuth(Component):
     """
-    Authenticate with Google Docs using the JSON key file.
+    Authenticate with Google Docs using the credentials JSON file.
+    
     inPorts:
-      - json_path (str): Path to the credentials JSON.
+      - json_path (str): Path to the JSON credentials.
     outPorts:
       - client: The authenticated Docs service client.
     """
@@ -172,9 +171,10 @@ class GoogleDocAuth(Component):
 @xai_component
 class GoogleDocGetDocIdFromUrl(Component):
     """
-    Extract the document ID from a full Google Docs URL.
+    Extract the document ID from a Google Docs URL.
+    
     inPorts:
-      - gdoc_url (str): The document's URL.
+      - gdoc_url (str): The document URL.
     outPorts:
       - doc_id (str): The extracted document ID.
     """
@@ -192,7 +192,8 @@ class GoogleDocGetDocIdFromUrl(Component):
 @xai_component
 class GoogleDocGetContent(Component):
     """
-    Retrieve the content of a Google Doc as plain text for review.
+    Retrieve the content of a Google Doc as plain text.
+    
     inPorts:
       - client
       - doc_id
@@ -220,14 +221,13 @@ class GoogleDocGetContent(Component):
 @xai_component
 class GoogleDocUpdateContent(Component):
     """
-    Targeted update of a Google Doc by replacing the first occurrence of a marker with new text.
-    The marker is replaced in place (with its original formatting preserved if possible).
+    Perform a targeted update by replacing the first occurrence of a marker with new text.
     
     inPorts:
       - client
       - doc_id
-      - marker (str): Text to search for in the document.
-      - new_text (str): Replacement text.
+      - marker (str): The text marker to search for.
+      - new_text (str): The replacement text.
     outPorts:
       - success (bool)
     """
@@ -262,7 +262,7 @@ class GoogleDocUpdateContent(Component):
                     "text": replacement
                 }
             }
-            # Optionally: add an updateTextStyle request here to apply specific formatting.
+            # Optionally, add an updateTextStyle request here if you want to adjust formatting.
         ]
         try:
             service.documents().batchUpdate(documentId=document_id, body={"requests": requests}).execute()
@@ -275,9 +275,16 @@ class GoogleDocUpdateContent(Component):
 @xai_component
 class GoogleDocAppendContent(Component):
     """
-    Append new markdown content to the end of a Google Doc while preserving existing formatting.
-    This version first inserts a newline and then resets that paragraph's style to NORMAL_TEXT.
-    Then it appends the parsed markdown content.
+    Append new markdown content to the end of a Google Doc while resetting formatting.
+    
+    This version:
+      1. Inserts a newline and immediately resets its paragraph style.
+      2. Inserts the new Markdown text.
+      3. Updates the entire inserted block (from the newline onwards) to NORMAL_TEXT.
+    
+    Note on lists:
+      The helper function currently inserts ordered lists as fixed text (e.g. "1. ") so the numbers won’t increment.
+      To get a true ordered list, you would need to use the API’s list creation requests.
     
     inPorts:
       - client
@@ -295,19 +302,18 @@ class GoogleDocAppendContent(Component):
         service = self.client.value if self.client.value is not None else ctx["gdocs"]
         document_id = self.doc_id.value
 
-        # Get the document's current end index.
+        # Get current document end index.
         current_index = get_document_end_index(service, document_id)
 
-        # Request 1: Insert a newline at the end.
+        # Step 1: Insert a newline to break any inherited formatting.
         newline_request = {
             "insertText": {
                 "location": {"index": current_index},
                 "text": "\n"
             }
         }
-        # Request 2: Reset paragraph style for that newline (set namedStyleType to NORMAL_TEXT).
-        # We assume the newline is a single character at index current_index.
-        reset_paragraph_style_request = {
+        # Reset that newline paragraph formatting.
+        reset_newline_request = {
             "updateParagraphStyle": {
                 "range": {"startIndex": current_index, "endIndex": current_index + 1},
                 "paragraphStyle": {"namedStyleType": "NORMAL_TEXT"},
@@ -315,21 +321,38 @@ class GoogleDocAppendContent(Component):
             }
         }
         
-        # Because we inserted a newline, adjust the base index for the markdown insertion.
+        # Step 2: Calculate the base index for new content.
         adjusted_base_index = current_index + 1
 
-        # Parse the markdown content into text and inline style requests.
+        # Use your helper to process the markdown.
         new_text, style_requests = parse_markdown_to_requests(self.content_to_append.value, base_index=adjusted_base_index)
 
-        insert_markdown_request = {
+        # Insert the new content.
+        insert_new_text_request = {
             "insertText": {
                 "location": {"index": adjusted_base_index},
                 "text": new_text
             }
         }
 
-        # Combine all requests: insert newline, update the newline's paragraph style, then insert markdown and then update inline styles.
-        batch_requests = [newline_request, reset_paragraph_style_request, insert_markdown_request]
+        # Determine the end index of the newly inserted block.
+        new_block_end_index = adjusted_base_index + len(new_text)
+
+        # Step 3: Reset paragraph formatting for the entire new block.
+        reset_new_block_request = {
+            "updateParagraphStyle": {
+                "range": {
+                    "startIndex": adjusted_base_index,
+                    "endIndex": new_block_end_index
+                },
+                "paragraphStyle": {"namedStyleType": "NORMAL_TEXT"},
+                "fields": "namedStyleType"
+            }
+        }
+
+        # Build batch requests: insert newline, reset it, insert text, then reset the new block's paragraph style.
+        batch_requests = [newline_request, reset_newline_request, insert_new_text_request, reset_new_block_request]
+        # Append inline style update requests if any.
         batch_requests.extend(style_requests)
 
         try:
