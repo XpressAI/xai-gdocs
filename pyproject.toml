@@ -1,7 +1,7 @@
 [project]
-name = "xircuits-component-library-template"
-version = "0.1.0"
-description = "A brief description of your component library"
+name = "xai-gdocs"
+version = "0.2.0"
+description = "A component library for interacting with Google Docs"
 authors = [{ name = "Eduardo Gonzalez", email = "eduardo@xpress.ai" }]
 license = "Apache-2.0"
 readme = "README.md"
