@@ -271,10 +271,14 @@ class GoogleDocUpdateContent(Component):
             print(f"Error during targeted update: {e}")
             self.success.value = False
 
+
 @xai_component
 class GoogleDocAppendContent(Component):
     """
     Append new markdown content to the end of a Google Doc while preserving existing formatting.
+    This version first inserts a newline and then resets that paragraph's style to NORMAL_TEXT.
+    Then it appends the parsed markdown content.
+    
     inPorts:
       - client
       - doc_id
@@ -290,22 +294,44 @@ class GoogleDocAppendContent(Component):
     def execute(self, ctx) -> None:
         service = self.client.value if self.client.value is not None else ctx["gdocs"]
         document_id = self.doc_id.value
-        
+
         # Get the document's current end index.
         current_index = get_document_end_index(service, document_id)
-        
-        # Convert markdown to text block and inline style update requests.
-        new_text, style_requests = parse_markdown_to_requests(self.content_to_append.value, base_index=current_index)
-        
-        # Build batchUpdate: first insert text, then update text style.
-        batch_requests = [{
+
+        # Request 1: Insert a newline at the end.
+        newline_request = {
             "insertText": {
                 "location": {"index": current_index},
+                "text": "\n"
+            }
+        }
+        # Request 2: Reset paragraph style for that newline (set namedStyleType to NORMAL_TEXT).
+        # We assume the newline is a single character at index current_index.
+        reset_paragraph_style_request = {
+            "updateParagraphStyle": {
+                "range": {"startIndex": current_index, "endIndex": current_index + 1},
+                "paragraphStyle": {"namedStyleType": "NORMAL_TEXT"},
+                "fields": "namedStyleType"
+            }
+        }
+        
+        # Because we inserted a newline, adjust the base index for the markdown insertion.
+        adjusted_base_index = current_index + 1
+
+        # Parse the markdown content into text and inline style requests.
+        new_text, style_requests = parse_markdown_to_requests(self.content_to_append.value, base_index=adjusted_base_index)
+
+        insert_markdown_request = {
+            "insertText": {
+                "location": {"index": adjusted_base_index},
                 "text": new_text
             }
-        }]
+        }
+
+        # Combine all requests: insert newline, update the newline's paragraph style, then insert markdown and then update inline styles.
+        batch_requests = [newline_request, reset_paragraph_style_request, insert_markdown_request]
         batch_requests.extend(style_requests)
-        
+
         try:
             service.documents().batchUpdate(documentId=document_id, body={"requests": batch_requests}).execute()
             self.success.value = True
