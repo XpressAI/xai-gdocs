@@ -100,10 +100,14 @@ def parse_markdown_to_requests(markdown_content, base_index):
             })
             current_offset += len(text) + 1
         elif element.name in ["ul", "ol"]:
-            bullet = "- " if element.name == "ul" else "1. "
+            list_number = 1
             for li in element.find_all("li"):
                 li_text = li.get_text()
-                line = bullet + li_text
+                if element.name == "ul":
+                    line = "- " + li_text
+                else:
+                    line = f"{list_number}. " + li_text
+                    list_number += 1
                 insertion_text += line + "\n"
                 current_offset += len(line) + 1
         elif element.name == "hr":
