@@ -10,6 +10,7 @@ A Xircuits Component Library for interacting with Google Docs API. This library 
 - Append content to existing documents
 - Update document content
 - Convert between Markdown and Google Docs formats
+- Delete document content
 
 ## Prerequisites
 
@@ -52,6 +53,8 @@ pip install -r requirements.txt
 - **GoogleDocGetContent**: Retrieves content from a Google Doc
 - **GoogleDocAppendContent**: Appends formatted markdown content to a document
 - **GoogleDocUpdateContent**: Updates existing content in a document
+- **GoogleDocDeleteContent**: Deletes existing content in a document
 
 ## Tests
+
 A github action to test your workflow runs has been provided. Simply add the path of your workflows [here](.github/workflows/run-workflow-tests.yml#L11).
